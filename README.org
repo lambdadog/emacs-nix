@@ -1,0 +1,11 @@
+#+TITLE: emacs-nix
+A patched version of Emacs that enables providing your `init` and
+`early-init` via Nix.
+* Usage
+It's recommended to use the [[https://app.cachix.org/cache/emacs-nix#pull][~emacs-nix~ Cachix cache]] when using
+~emacs-nix~, as my CI pushes to it on every commit.
+
+Using ~emacs-nix~ involves a bit of scaffolding, for which I haven't
+yet created a GitHub template. As such, the easiest way to start for
+now is to simply clone my own [[https://github.com/lambdadog/emacs-config][~emacs-config~ repository]] and modify it
+to your liking.
