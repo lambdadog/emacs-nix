@@ -13,8 +13,7 @@ let
 
     let
       emacs-nix-config = emacsPackages.trivialBuild {
-        # makes emacsWithPackages generate a nifty derivation name
-        pname = "with-config";
+        pname = "emacs-nix-config";
 
         packageRequires = (pkgs.lib.lists.optional (! isNull earlyInit) earlyInit) ++ [
           init
@@ -34,7 +33,9 @@ let
           '';
         };
       };
-    in emacsPackages.withPackages [ emacs-nix-config ];
+    in (emacsPackages.withPackages [ emacs-nix-config ]).overrideAttrs (_: {
+      name = (pkgs.appendToName "with-config" emacsPackages.emacs).name;
+    });
 
   selectPatches = with pkgs; version: let
     majorVersion = lib.versions.major version;
@@ -54,7 +55,7 @@ let
 
   mkNixEmacs = oldPkg: let
     result = oldPkg.overrideAttrs (old: {
-      name = "nix-loader-${oldPkg.name}";
+      name = (pkgs.appendToName "nix" oldPkg).name;
 
       patches = (old.patches or []) ++ (selectPatches oldPkg.version);
     });
