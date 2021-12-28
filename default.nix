@@ -52,7 +52,7 @@ let
 
   mkNixEmacs = oldPkg: let
     result = oldPkg.overrideAttrs (old: {
-      name = "${oldPkg.pname}-nix-${oldPkg.version}";
+      name = "nix-loader-${oldPkg.name}";
 
       patches = (old.patches or []) ++ (selectPatches oldPkg.version);
     });
