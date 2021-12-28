@@ -1,0 +1,36 @@
+From 74278c06fbf595b1e5a7695dd0409f0e1893aba3 Mon Sep 17 00:00:00 2001
+From: lambdadog <github@pea.sh>
+Date: Tue, 28 Dec 2021 13:02:31 -0500
+Subject: [PATCH 2/3] Load autoloads
+
+Normally, your elisp package manager handles this, but
+emacsWithPackages doesn't, so we do it for you.
+---
+ lisp/startup.el | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/lisp/startup.el b/lisp/startup.el
+index 8e601a9ccd..5a1148a022 100644
+--- a/lisp/startup.el
++++ b/lisp/startup.el
+@@ -1298,6 +1298,17 @@ please check its value")
+     (load emacs-nix-config--early-init nil 'nomessage))
+   (setq early-init-file user-init-file)
+ 
++  ;; Load autoloads
++  ;;
++  ;; Normally, this is handled by your elisp package manager, but
++  ;; emacsWithPackages doesn't have any code to handle this, so this
++  ;; is included as a "bugfix"
++  (dolist (dir load-path)
++    (dolist (autoload (file-expand-wildcards
++		       (expand-file-name "*-autoloads.el" dir)
++                       t))
++      (load autoload nil t t)))
++
+   ;; If any package directory exists, initialize the package system.
+   (and user-init-file
+        package-enable-at-startup
+-- 
+2.30.1 (Apple Git-130)
+

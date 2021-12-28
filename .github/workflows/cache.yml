@@ -1,0 +1,38 @@
+name: Cachix Cache
+on:
+  push:
+    branches:
+      - master
+jobs:
+  build:
+    name: Build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        os: [darwin, linux]
+        build:
+          - emacs
+          - emacsGit
+          - emacsGcc
+          - emacsPgtk
+          - emacsPgtkGcc
+          - emacsUnstable
+
+        include:
+          - os: darwin
+            runner: macos-latest
+          - os: linux
+            runner: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v13
+      - name: Set up Cachix
+        uses: cachix/cachix-action@v8
+        with:
+          name: emacs-nix
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+          extraPullNames: nix-community
+      - name: Build
+        run: nix-build ./. --attr "${{ matrix.build }}.raw"
