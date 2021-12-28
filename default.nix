@@ -49,7 +49,7 @@ let
   mkNixEmacsTree = emacs: let
     nixEmacs = mkNixEmacs emacs;
   in {
-    raw = mkNixEmacs nixEmacs;
+    raw = nixEmacs;
     withConfig = emacsWithConfig nixEmacs;
     packages = emacsPackagesFor nixEmacs;
   };
