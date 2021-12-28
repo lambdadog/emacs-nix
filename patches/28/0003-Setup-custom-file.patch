@@ -1,0 +1,43 @@
+From 11f1ad2e4a04b911e13953e9da3bf2d889cbe792 Mon Sep 17 00:00:00 2001
+From: lambdadog <github@pea.sh>
+Date: Tue, 28 Dec 2021 13:10:20 -0500
+Subject: [PATCH 3/3] Setup custom-file
+
+Since our init files are immutable, this is necessary to avoid
+errors.
+---
+ lisp/startup.el | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/lisp/startup.el b/lisp/startup.el
+index 47f446f586..fa0bba4a2a 100644
+--- a/lisp/startup.el
++++ b/lisp/startup.el
+@@ -1274,6 +1274,10 @@ please check its value")
+ 	  (setq xdg-dir (concat "~" init-file-user "/.config/emacs/"))
+ 	  (startup--xdg-or-homedot xdg-dir init-file-user)))
+ 
++  ;; Since our init file is immutable, a custom file is necessary.
++  (when init-file-user
++    (setq custom-file (locate-user-emacs-file "custom.el")))
++
+   ;; Load the early init file, if found.
+   (when (and init-file-user
+              (boundp 'emacs-nix-config--early-init))
+@@ -1407,6 +1411,13 @@ please check its value")
+       (setq user-init-file t)
+       (load emacs-nix-config--init nil 'nomessage))
+ 
++    ;; `custom-file' is set before loading both early-init and init
++    ;; and loaded after to give the user the opportunity to set it
++    ;; themselves.
++    (when (and init-file-user
++               (file-exists-p custom-file))
++      (load custom-file))
++
+     (when (and deactivate-mark transient-mark-mode)
+       (with-current-buffer (window-buffer)
+         (deactivate-mark)))
+-- 
+2.30.1 (Apple Git-130)
+

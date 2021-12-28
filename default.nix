@@ -34,15 +34,27 @@ let
     };
   in emacsPackages.withPackages [ emacs-nix-config ];
 
+  selectPatches = with pkgs; version: let
+    majorVersion = lib.versions.major version;
+    versionKey =
+      # Detect if the major version is a date, indicating a build off
+      # of the master branch.
+      if builtins.stringLength majorVersion == 8
+      then "master"
+      else majorVersion;
+
+    patches = let
+      dirToPatches = versionDir: let
+        patchNames = lib.attrNames (builtins.readDir (./patches + "/${versionDir}"));
+      in map (name: ./patches + "/${versionDir}/${name}") patchNames;
+    in lib.attrsets.mapAttrs (name: _: dirToPatches name) (builtins.readDir ./patches);
+  in patches."${versionKey}";
+
   mkNixEmacs = oldPkg: let
     result = oldPkg.overrideAttrs (old: {
       name = "${oldPkg.pname}-nix-${oldPkg.version}";
 
-      patches = (old.patches or []) ++ [
-        ./patches/0001-Add-nix-loader.patch
-        ./patches/0002-Load-autoloads.patch
-        ./patches/0003-Setup-custom-file.patch
-      ];
+      patches = (old.patches or []) ++ (selectPatches oldPkg.version);
     });
   in result;
 

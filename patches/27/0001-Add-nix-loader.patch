@@ -1,0 +1,154 @@
+From c0f2b0c70860eb2444baf1de178fc9baf6b83dea Mon Sep 17 00:00:00 2001
+From: lambdadog <github@pea.sh>
+Date: Tue, 28 Dec 2021 12:52:28 -0500
+Subject: [PATCH 1/3] Add nix loader
+
+Loads "emacs-nix-config", a nix-generated package, then uses the
+following variables during the load sequence:
+ - emacs-nix-config--user-emacs-directory
+ - emacs-nix-config--early-init
+ - emacs-nix-config--init
+---
+ lisp/startup.el | 98 ++++++++++++++++++++++++++++++-------------------
+ 1 file changed, 60 insertions(+), 38 deletions(-)
+
+diff --git a/lisp/startup.el b/lisp/startup.el
+index b60c13e448..64ada265d0 100644
+--- a/lisp/startup.el
++++ b/lisp/startup.el
+@@ -534,8 +534,6 @@ It is the default value of the variable `top-level'."
+ 	    (if xdg-config-home
+ 		(concat xdg-config-home "/emacs/")
+ 	      startup--xdg-config-default)))
+-    (setq user-emacs-directory
+-	  (startup--xdg-or-homedot startup--xdg-config-home-emacs nil))
+ 
+     ;; Look in each dir in load-path for a subdirs.el file.  If we
+     ;; find one, load it, which will add the appropriate subdirs of
+@@ -562,6 +560,49 @@ It is the default value of the variable `top-level'."
+         ;; of load-path and we want to take it into account.
+         (setq tail (cdr tail))))
+ 
++    ;; emacs-nix-config is a generated file that contains the
++    ;; variables we'll be using for setting the user-emacs-directory
++    ;; and loading our init and early-init files.
++    (unless noninteractive
++      (load "emacs-nix-config" nil 'nomessage))
++
++    ;; Setting user-emacs-directory and generating
++    ;; `native-comp-eln-load-path' must be moved below expanding the
++    ;; load-path since they depend on
++    ;; `emacs-nix-config--user-emacs-directory'
++    ;;
++    ;; Falls back to a temp directory when noninteractive.
++    (setq user-emacs-directory
++          (if noninteractive
++              (expand-file-name "user-emacs-directory" temporary-file-directory)
++            emacs-nix-config--user-emacs-directory))
++
++    ;; We want to ensure the directory exists in both cases, since we
++    ;; no longer have the guarantee of "it exists because init.el is
++    ;; in it"
++    (mkdir user-emacs-directory 'with-parents)
++
++    (when (featurep 'native-compile)
++      ;; Form `native-comp-eln-load-path'.
++      (let ((path-env (getenv "EMACSNATIVELOADPATH")))
++        (when path-env
++          (dolist (path (split-string path-env path-separator))
++            (unless (string= "" path)
++              (push path native-comp-eln-load-path)))))
++      (push (expand-file-name "eln-cache/" user-emacs-directory)
++            native-comp-eln-load-path)
++      ;; When $HOME is set to '/nonexistent' means we are running the
++      ;; testsuite, add a temporary folder in front to produce there
++      ;; new compilations.
++      (when (and (equal (getenv "HOME") "/nonexistent")
++                 ;; We may be running in a chroot environment where we
++                 ;; can't write anything.
++                 (file-writable-p (expand-file-name
++                                   (or temporary-file-directory ""))))
++        (let ((tmp-dir (make-temp-file "emacs-testsuite-" t)))
++          (add-hook 'kill-emacs-hook (lambda () (delete-directory tmp-dir t)))
++          (push tmp-dir native-comp-eln-load-path))))
++
+     ;; Set the default strings to display in mode line for end-of-line
+     ;; formats that aren't native to this platform.  This should be
+     ;; done before calling set-locale-environment, as the latter might
+@@ -758,7 +799,12 @@ It is the default value of the variable `top-level'."
+           (if (string-match "\\`DISPLAY=" varval)
+               (setq display varval))))
+       (when display
+-        (delete display process-environment)))))
++        (delete display process-environment))))
++
++  ;; Unload `emacs-nix-config' to avoid any changes to the actual emacs
++  ;; environment after startup. It only contains consts, so this
++  ;; is safe.
++  (unload-feature 'emacs-nix-config nil))
+ 
+ ;; Precompute the keyboard equivalents in the menu bar items.
+ ;; Command-line options supported by tty's:
+@@ -1221,15 +1267,12 @@ please check its value")
+ 	  (startup--xdg-or-homedot xdg-dir init-file-user)))
+ 
+   ;; Load the early init file, if found.
+-  (startup--load-user-init-file
+-   (lambda ()
+-     (expand-file-name
+-      ;; We use an explicit .el extension here to force
+-      ;; startup--load-user-init-file to set user-init-file to "early-init.el",
+-      ;; with the .el extension, if the file doesn't exist, not just
+-      ;; "early-init" without an extension, as it does for ".emacs".
+-      "early-init.el"
+-      startup-init-directory)))
++  (when (and init-file-user
++             (boundp 'emacs-nix-config--early-init))
++    ;; When `user-init-file' is t, then `load' stores the name of the
++    ;; file it loads into `user-init-file'
++    (setq user-init-file t)
++    (load emacs-nix-config--early-init nil 'nomessage))
+   (setq early-init-file user-init-file)
+ 
+   ;; If any package directory exists, initialize the package system.
+@@ -1366,32 +1409,11 @@ please check its value")
+ 	  (load site-run-file t t)))
+ 
+     ;; Load that user's init file, or the default one, or none.
+-    (startup--load-user-init-file
+-     (lambda ()
+-       (cond
+-	((eq startup-init-directory xdg-dir) nil)
+-        ((eq system-type 'ms-dos)
+-         (concat "~" init-file-user "/_emacs"))
+-        ((not (eq system-type 'windows-nt))
+-         (concat "~" init-file-user "/.emacs"))
+-        ;; Else deal with the Windows situation.
+-        ((directory-files "~" nil "\\`\\.emacs\\(\\.elc?\\)?\\'")
+-         ;; Prefer .emacs on Windows.
+-         "~/.emacs")
+-        ((directory-files "~" nil "\\`_emacs\\(\\.elc?\\)?\\'")
+-         ;; Also support _emacs for compatibility, but warn about it.
+-         (push `(initialization
+-                 ,(format-message
+-                   "`_emacs' init file is deprecated, please use `.emacs'"))
+-               delayed-warnings-list)
+-         "~/_emacs")
+-        (t ;; But default to .emacs if _emacs does not exist.
+-         "~/.emacs")))
+-     (lambda ()
+-       (expand-file-name
+-        "init"
+-        startup-init-directory))
+-     t)
++    (when init-file-user
++      ;; When `user-init-file' is t, then `load' stores the name of the
++      ;; file it loads into `user-init-file'
++      (setq user-init-file t)
++      (load emacs-nix-config--init nil 'nomessage))
+ 
+     (when (and deactivate-mark transient-mark-mode)
+       (with-current-buffer (window-buffer)
+-- 
+2.30.1 (Apple Git-130)
+
