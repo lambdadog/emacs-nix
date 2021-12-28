@@ -7,30 +7,34 @@ let
 
   inherit (pkgs) emacsPackagesFor;
 
-  emacsWithConfig = emacsPackages: { emacsDir, earlyInit ? null , init }: let
-    emacs-nix-config = emacsPackages.trivialBuild {
-      # makes emacsWithPackages generate a nifty derivation name
-      pname = "with-config";
+  emacsWithConfig = emacsPackages: { emacsDir, init, earlyInit ? null }:
+    # It'd be both an easy to make and bad mistake to pass a path here
+    assert builtins.isString emacsDir;
 
-      packageRequires = (pkgs.lib.lists.optional (! isNull earlyInit) earlyInit) ++ [
-        init
-      ];
+    let
+      emacs-nix-config = emacsPackages.trivialBuild {
+        # makes emacsWithPackages generate a nifty derivation name
+        pname = "with-config";
 
-      src = pkgs.writeTextFile {
-        name = "emacs-nix-config-src";
+        packageRequires = (pkgs.lib.lists.optional (! isNull earlyInit) earlyInit) ++ [
+          init
+        ];
 
-        destination = "/emacs-nix-config.el";
+        src = pkgs.writeTextFile {
+          name = "emacs-nix-config-src";
 
-        text = ''
-          ;; -*- lexical-binding: t -*-
-          (defconst emacs-nix-config--user-emacs-directory "${emacsDir}")
-          ${pkgs.lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInit.pname}\")"}
-          (defconst emacs-nix-config--init "${init.pname}")
-          (provide 'emacs-nix-config)
-        '';
+          destination = "/emacs-nix-config.el";
+
+          text = ''
+            ;; -*- lexical-binding: t -*-
+            (defconst emacs-nix-config--user-emacs-directory "${emacsDir}")
+            ${pkgs.lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInit.pname}\")"}
+            (defconst emacs-nix-config--init "${init.pname}")
+            (provide 'emacs-nix-config)
+          '';
+        };
       };
-    };
-  in emacsPackages.withPackages [ emacs-nix-config ];
+    in emacsPackages.withPackages [ emacs-nix-config ];
 
   selectPatches = with pkgs; version: let
     majorVersion = lib.versions.major version;
