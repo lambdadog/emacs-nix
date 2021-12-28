@@ -61,9 +61,11 @@ let
     });
   in result;
 
-  mkNixEmacsTree = emacs: rec {
-    raw = mkNixEmacs emacs;
-    packages = emacsPackagesFor raw;
+  mkNixEmacsTree = emacs: let
+    nixEmacs = mkNixEmacs emacs;
+  in
+  rec {
+    packages = emacsPackagesFor nixEmacs;
     withConfig = emacsWithConfig packages;
   };
 in {
