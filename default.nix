@@ -7,9 +7,7 @@ let
 
   inherit (pkgs) emacsPackagesFor;
 
-  emacsWithConfig = emacs: { emacsDir, earlyInit ? null , init }: let
-    emacsPackages = (emacsPackagesFor emacs);
-
+  emacsWithConfig = emacsPackages: { emacsDir, earlyInit ? null , init }: let
     emacs-nix-config = emacsPackages.trivialBuild {
       # makes emacsWithPackages generate a nifty derivation name
       pname = "with-config";
@@ -58,12 +56,10 @@ let
     });
   in result;
 
-  mkNixEmacsTree = emacs: let
-    nixEmacs = mkNixEmacs emacs;
-  in {
-    raw = nixEmacs;
-    withConfig = emacsWithConfig nixEmacs;
-    packages = emacsPackagesFor nixEmacs;
+  mkNixEmacsTree = emacs: rec {
+    raw = mkNixEmacs emacs;
+    packages = emacsPackagesFor raw;
+    withConfig = emacsWithConfig packages;
   };
 in {
   emacs         = mkNixEmacsTree pkgs.emacs;
