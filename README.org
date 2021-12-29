@@ -1,6 +1,6 @@
 #+TITLE: emacs-nix
-A patched version of Emacs that enables providing your `init` and
-`early-init` via Nix.
+A patched version of Emacs that enables providing your ~init~ and
+~early-init~ via Nix.
 * Usage
 It's recommended to use the [[https://app.cachix.org/cache/emacs-nix#pull][~emacs-nix~ Cachix cache]] when using
 ~emacs-nix~, as my CI pushes to it on every commit.
