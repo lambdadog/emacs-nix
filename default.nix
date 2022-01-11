@@ -1,25 +1,51 @@
 let
   sources = import ./nix/sources.nix;
 
-  pkgs = import sources.nixpkgs {
+  vendoredPkgs = import sources.nixpkgs {
     overlays = [ (import sources.emacs-overlay) ];
   };
+in
+{ pkgs ? vendoredPkgs
+, ci ? false
+}:
 
-  inherit (pkgs) emacsPackagesFor;
+with pkgs;
 
-  emacsWithConfig = emacsPackages: { emacsDir, init, earlyInit ? null }:
-    # It'd be both an easy to make and bad mistake to pass a path here
+let
+  emacsWithConfig = emacsPkg: { emacsDir, init, earlyInit ? null }:
+    # Ensure a string path is used rather than a nix path.
+    #
+    # When a nix path is used, it's copied to the nix store prior to
+    # substitution and therefore wouldn't function as expected as an
+    # emacs dir.
+    #
+    # TODO: Further checking that emacsDir actually contains a path
+    # rather than an arbitrary string.
     assert builtins.isString emacsDir;
 
-    let
-      emacs-nix-config = emacsPackages.trivialBuild {
-        pname = "emacs-nix-config";
+    # TODO: Add asserts that init and earlyInit are functions to
+    # derivations (or null, for earlyInit)
 
-        packageRequires = (pkgs.lib.lists.optional (! isNull earlyInit) earlyInit) ++ [
-          init
+    let
+      # Apply our patches.
+      nixEmacs = mkNixEmacs emacsPkg;
+
+      nixEmacsPackages = emacsPackagesFor nixEmacs;
+
+      emacs-nix-config = let
+        earlyInitPkg =
+          if isNull earlyInit
+          then null
+          else earlyInit nixEmacsPackages;
+        initPkg = init nixEmacsPackages;
+      in nixEmacsPackages.trivialBuild {
+        pname = "${emacsPkg.version}-emacs-nix-config";
+
+        packageRequires = (lib.lists.optional (! isNull earlyInit) earlyInitPkg) ++ [
+          initPkg
         ];
 
-        src = pkgs.writeTextFile {
+        src = writeTextFile {
           name = "emacs-nix-config-src";
 
           destination = "/emacs-nix-config.el";
@@ -27,17 +53,17 @@ let
           text = ''
             ;; -*- lexical-binding: t -*-
             (defconst emacs-nix-config--user-emacs-directory "${emacsDir}")
-            ${pkgs.lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInit.pname}\")"}
-            (defconst emacs-nix-config--init "${init.pname}")
+            ${lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInitPkg.pname}\")"}
+            (defconst emacs-nix-config--init "${initPkg.pname}")
             (provide 'emacs-nix-config)
           '';
         };
       };
-    in (emacsPackages.withPackages [ emacs-nix-config ]).overrideAttrs (_: {
-      name = (pkgs.appendToName "with-config" emacsPackages.emacs).name;
+    in (nixEmacsPackages.withPackages [ emacs-nix-config ]).overrideAttrs (_: {
+      name = (appendToName "with-config" emacsPkg).name;
     });
 
-  selectPatches = with pkgs; version: let
+  selectPatches = version: let
     majorVersion = lib.versions.major version;
     versionKey =
       # Detect if the major version is a date, indicating a build off
@@ -51,30 +77,25 @@ let
         patchNames = lib.attrNames (builtins.readDir (./patches + "/${versionDir}"));
       in map (name: ./patches + "/${versionDir}/${name}") patchNames;
     in lib.attrsets.mapAttrs (name: _: dirToPatches name) (builtins.readDir ./patches);
-  in patches."${versionKey}";
+  in if lib.hasAttr versionKey patches
+     then patches."${versionKey}"
+     else throw "emacsWithConfig does not have patches for emacs version \"${versionKey}\"";
 
   mkNixEmacs = oldPkg: let
     result = oldPkg.overrideAttrs (old: {
-      name = (pkgs.appendToName "nix" oldPkg).name;
+      name = (appendToName "nix" oldPkg).name;
 
       patches = (old.patches or []) ++ (selectPatches oldPkg.version);
     });
   in result;
 
-  mkNixEmacsTree = emacs: let
-    nixEmacs = mkNixEmacs emacs;
-  in
-  rec {
-    packages = emacsPackagesFor nixEmacs;
-    withConfig = emacsWithConfig packages;
+  emacsVersions = {
+    inherit (vendoredPkgs)
+      emacs emacsGit emacsGcc emacsPgtk emacsPgtkGcc emacsUnstable;
   };
-in {
-  emacs         = mkNixEmacsTree pkgs.emacs;
-  emacsGit      = mkNixEmacsTree pkgs.emacsGit;
-  emacsGcc      = mkNixEmacsTree pkgs.emacsGcc;
-  emacsPgtk     = mkNixEmacsTree pkgs.emacsPgtk;
-  emacsPgtkGcc  = mkNixEmacsTree pkgs.emacsPgtkGcc;
-  emacsUnstable = mkNixEmacsTree pkgs.emacsUnstable;
+in
+if ci
+then lib.mapAttrs (_: pkg: mkNixEmacs pkg) emacsVersions
+else {
+  inherit emacsVersions emacsWithConfig;
 }
-
-
