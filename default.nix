@@ -23,9 +23,6 @@ let
     # rather than an arbitrary string.
     assert builtins.isString emacsDir;
 
-    # TODO: Add asserts that init and earlyInit are functions to
-    # derivations (or null, for earlyInit)
-
     let
       # Apply our patches.
       nixEmacs = mkNixEmacs emacsPkg;
@@ -38,27 +35,31 @@ let
           then null
           else earlyInit nixEmacsPackages;
         initPkg = init nixEmacsPackages;
-      in nixEmacsPackages.trivialBuild {
-        pname = "${emacsPkg.version}-emacs-nix-config";
+      in
+        assert lib.isDerivation earlyInitPkg || isNull earlyInitPkg;
+        assert lib.isDerivation initPkg;
 
-        packageRequires = (lib.lists.optional (! isNull earlyInit) earlyInitPkg) ++ [
-          initPkg
-        ];
+        nixEmacsPackages.trivialBuild {
+          pname = "${emacsPkg.version}-emacs-nix-config";
 
-        src = writeTextFile {
-          name = "emacs-nix-config-src";
+          packageRequires = (lib.lists.optional (! isNull earlyInit) earlyInitPkg) ++ [
+            initPkg
+          ];
 
-          destination = "/emacs-nix-config.el";
+          src = writeTextFile {
+            name = "emacs-nix-config-src";
 
-          text = ''
-            ;; -*- lexical-binding: t -*-
-            (defconst emacs-nix-config--user-emacs-directory "${emacsDir}")
-            ${lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInitPkg.pname}\")"}
-            (defconst emacs-nix-config--init "${initPkg.pname}")
-            (provide 'emacs-nix-config)
-          '';
+            destination = "/emacs-nix-config.el";
+
+            text = ''
+              ;; -*- lexical-binding: t -*-
+              (defconst emacs-nix-config--user-emacs-directory "${emacsDir}")
+              ${lib.optionalString (! isNull earlyInit) "(defconst emacs-nix-config--early-init \"${earlyInitPkg.pname}\")"}
+              (defconst emacs-nix-config--init "${initPkg.pname}")
+              (provide 'emacs-nix-config)
+            '';
+          };
         };
-      };
     in (nixEmacsPackages.withPackages [ emacs-nix-config ]).overrideAttrs (_: {
       name = (appendToName "with-config" emacsPkg).name;
     });
