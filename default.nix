@@ -13,15 +13,15 @@ with pkgs;
 
 let
   emacsWithConfig = emacsPkg: { emacsDir, init, earlyInit ? null }:
-    # Ensure a string path is used rather than a nix path.
+    # Ensure a string path is used rather than a nix path and that
+    # said path ends with "/" (emacs uses concatenation for operations
+    # on paths, so directory paths ending in "/" is essential).
     #
     # When a nix path is used, it's copied to the nix store prior to
     # substitution and therefore wouldn't function as expected as an
     # emacs dir.
-    #
-    # TODO: Further checking that emacsDir actually contains a path
-    # rather than an arbitrary string.
-    assert builtins.isString emacsDir;
+    assert builtins.isString emacsDir
+      && builtins.substring ((builtins.stringLength emacsDir) - 1) 1 emacsDir == "/";
 
     let
       # Apply our patches.
