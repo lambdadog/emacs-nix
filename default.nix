@@ -1,8 +1,8 @@
 let
   sources = import ./nix/sources.nix;
 
-  vendoredPkgs = system: import sources.nixpkgs {
-    overlays = [ (import sources.emacs-overlay) ];
+  vendoredPkgs = source: system: import sources.nixpkgs {
+    overlays = [ (import source) ];
     inherit system;
   };
 in
@@ -11,7 +11,7 @@ in
 , ci ? false
 }:
 
-with (if isNull pkgs then vendoredPkgs system else pkgs);
+with (if isNull pkgs then vendoredPkgs sources.emacs-overlay-pkgs system else pkgs);
 
 let
   emacsWithConfig = emacsPkg: { emacsDir, init, earlyInit ? null }:
@@ -93,7 +93,7 @@ let
   in result;
 
   emacsVersions = {
-    inherit (vendoredPkgs system)
+    inherit (vendoredPkgs sources.emacs-overlay-emacs system)
       emacs emacsGit emacsGcc emacsPgtk emacsPgtkGcc emacsUnstable;
   };
 in
