@@ -1,4 +1,6 @@
 # `emacs-nix`
+[ DEPRECATED -- I'm now of the opinion that managing your emacs config with Nix is an antipattern, and use [borg](https://github.com/emacscollective/borg). ]
+
 A nix tool to enable providing your emacs config via Nix.
 ## Usage
 It's recommended to use the [`emacs-nix` Cachix
